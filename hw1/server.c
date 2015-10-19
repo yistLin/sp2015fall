@@ -9,6 +9,8 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+#include "db_manager.h" // my file proccessor
+
 #define ERR_EXIT(a) { perror(a); exit(1); }
 
 typedef struct {
@@ -87,41 +89,74 @@ int main(int argc, char** argv) {
   // Loop for handling connections
   fprintf(stderr, "\nstarting on %.80s, port %d, fd %d, maxconn %d...\n", svr.hostname, svr.port, svr.listen_fd, maxfd);
 
+  // my own variable
+  fd_set rset, allset;
+  FD_ZERO(&allset);
+  FD_SET(svr.listen_fd, &allset);
+  int monitor_fd = svr.listen_fd;
+  int socket_fd;
+  Porter* porter = port_init();
+  int id, amount, price;
+
   while (1) {
     // TODO: Add IO multiplexing
-    
-    // Check new connection
-    clilen = sizeof(cliaddr);
-    conn_fd = accept(svr.listen_fd, (struct sockaddr*)&cliaddr, (socklen_t*)&clilen);
-    if (conn_fd < 0) {
-      if (errno == EINTR || errno == EAGAIN) continue;  // try again
-      if (errno == ENFILE) {
-        (void) fprintf(stderr, "out of file descriptor table ... (maxconn %d)\n", maxfd);
-        continue;
+
+    rset = allset;
+    select(monitor_fd + 1, &rset, NULL, NULL, NULL);
+
+    // new client connection
+    if (FD_ISSET(svr.listen_fd, &rset)) {
+      clilen = sizeof(cliaddr);
+      conn_fd = accept(svr.listen_fd, (struct sockaddr*)&cliaddr, (socklen_t*)&clilen);
+      if (conn_fd < 0) {
+        if (errno == EINTR || errno == EAGAIN) continue;  // try again
+        if (errno == ENFILE) {
+          (void) fprintf(stderr, "out of file descriptor table ... (maxconn %d)\n", maxfd);
+          continue;
+        }
+        ERR_EXIT("accept");
       }
-      ERR_EXIT("accept");
-    }
-    requestP[conn_fd].conn_fd = conn_fd;
-    strcpy(requestP[conn_fd].host, inet_ntoa(cliaddr.sin_addr));
-    fprintf(stderr, "getting a new request... fd %d from %s\n", conn_fd, requestP[conn_fd].host);
+      requestP[conn_fd].conn_fd = conn_fd;
+      strcpy(requestP[conn_fd].host, inet_ntoa(cliaddr.sin_addr));
+      fprintf(stderr, "getting a new request... fd %d from %s\n", conn_fd, requestP[conn_fd].host);
 
+      // add new descriptor to set
+      FD_SET(conn_fd, &allset);
 
-    ret = handle_read(&requestP[conn_fd]); // parse data from client to requestP[conn_fd].buf
-    if (ret < 0) {
-      fprintf(stderr, "bad request from %s\n", requestP[conn_fd].host);
-      continue;
+      // extend the select() range
+      if (conn_fd > monitor_fd) {
+        monitor_fd = conn_fd;
+      }
     }
+
+    // check all client if data is ready
+    for (i = svr.listen_fd+1; i <= monitor_fd; ++i) {
+      socket_fd = requestP[i].conn_fd;
+      if (FD_ISSET(socket_fd, &rset)) {
+        ret = handle_read(&requestP[i]); // parse data from client to requestP[conn_fd].buf
+        if (ret < 0) {
+          fprintf(stderr, "bad request from %s\n", requestP[i].host);
+          continue;
+        }
+
+        id = atoi(requestP[i].buf);
 
 #ifdef READ_SERVER
-    sprintf(buf,"%s : %s\n",accept_read_header,requestP[conn_fd].buf);
-    write(requestP[conn_fd].conn_fd, buf, strlen(buf));
+        sprintf(buf, "%s : %s\n",accept_read_header,requestP[i].buf);
+        port_read(porter, id, &amount, &price);
+        sprintf(buf, "item%d $%d remain: %d\n", id, price, amount);
+        write(requestP[i].conn_fd, buf, strlen(buf));
 #else
-    sprintf(buf,"%s : %s\n",accept_write_header,requestP[conn_fd].buf);
-    write(requestP[conn_fd].conn_fd, buf, strlen(buf));
+        sprintf(buf,"%s : %s\n",accept_write_header,requestP[i].buf);
+        write(requestP[i].conn_fd, buf, strlen(buf));
 #endif
 
-    close(requestP[conn_fd].conn_fd);
-    free_request(&requestP[conn_fd]);
+        close(requestP[i].conn_fd);
+        // clear socket descriptor from the set
+        FD_CLR(socket_fd, &allset);
+        free_request(&requestP[i]);
+      }
+    }
   }
 
   free(requestP);
