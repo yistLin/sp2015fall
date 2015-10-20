@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct {
   int id, amount, price;
@@ -16,12 +17,15 @@ typedef struct {
 
 Porter* port_init();
 
-int db_list(const Porter*);
-
 int port_read(const Porter*, const int, int*, int*);
 
-int db_write(const Porter*, const int, const int, const int);
+int port_write(const Porter*, const int);
 
-int db_close(Porter*);
+int port_unlock(const Porter*, const int);
+
+int port_operate(const Porter*, const char*, char*, const int);
+
+int port_close(Porter*);
 
 #endif // DB_MANAGER_H_
+

@@ -139,16 +139,50 @@ int main(int argc, char** argv) {
           continue;
         }
 
-        id = atoi(requestP[i].buf);
-
 #ifdef READ_SERVER
-        sprintf(buf, "%s : %s\n",accept_read_header,requestP[i].buf);
-        port_read(porter, id, &amount, &price);
-        sprintf(buf, "item%d $%d remain: %d\n", id, price, amount);
+        id = atoi(requestP[i].buf);
+        // sprintf(buf, "%s : %s\n",accept_read_header,requestP[i].buf);
+        if (port_read(porter, id, &amount, &price) == -1) {
+          sprintf(buf, "This item is locked.\n");
+        }
+        else {
+          sprintf(buf, "item%d $%d remain: %d\n", id, price, amount);
+        }
         write(requestP[i].conn_fd, buf, strlen(buf));
 #else
-        sprintf(buf,"%s : %s\n",accept_write_header,requestP[i].buf);
-        write(requestP[i].conn_fd, buf, strlen(buf));
+        if (requestP[i].wait_for_write != 1) {
+          // wait_for_write is 1 means this socket is bidding to an item for changing
+          id = atoi(requestP[i].buf);
+          if (port_write(porter, id) != 1) {
+            sprintf(buf, "This item is locked.\n");
+            write(requestP[i].conn_fd, buf, strlen(buf));
+          }
+          else {
+            // This item is not locked by other process
+            int j;
+            for (j = svr.listen_fd+1; j <= monitor_fd; ++j) {
+              if (j != i && requestP[j].wait_for_write == 1 && requestP[j].item == id) {
+                sprintf(buf, "This item is locked.\n");
+                write(requestP[i].conn_fd, buf, strlen(buf));
+                break;
+              }
+            }
+            if (j > monitor_fd) {
+              // This item is not locked by other file descriptor
+              sprintf(buf, "This item is modifiable.\n");
+              write(requestP[i].conn_fd, buf, strlen(buf));
+              requestP[i].wait_for_write = 1;
+              requestP[i].item = id;
+              continue;
+            }
+          }
+        }
+        else {
+          // This socket is waiting for command such as buy, sell, price
+          port_operate(porter, requestP[i].buf, buf, requestP[i].item);
+          write(requestP[i].conn_fd, buf, strlen(buf));
+          port_unlock(porter, id);
+        }
 #endif
 
         close(requestP[i].conn_fd);
@@ -160,6 +194,7 @@ int main(int argc, char** argv) {
   }
 
   free(requestP);
+  port_close(porter);
   return 0;
 }
 
