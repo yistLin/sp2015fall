@@ -87,23 +87,35 @@ int port_operate(const Porter* P, const char* input_buf, char* output_buf, const
     if (number > box.amount)
       sprintf(output_buf,"Operation failed.\n");
     else {
-      sprintf(output_buf,"usage: buy [amount]\n");
+      // sprintf(output_buf,"usage: buy [amount]\n");
+      box.amount -= number;
+      lseek(P->file_d, (id-1)*sizeof(Item), SEEK_SET);
+      write(P->file_d, &box, sizeof(Item));
+      return 1;
     }
   }
   else if (strcmp(command, "sell") == 0) {
     if (number > box.amount)
       sprintf(output_buf,"Operation failed.\n");
     else {
-      sprintf(output_buf,"usage: sell [amount]\n");
+      // sprintf(output_buf,"usage: sell [amount]\n");
+      box.amount += number;
+      lseek(P->file_d, (id-1)*sizeof(Item), SEEK_SET);
+      write(P->file_d, &box, sizeof(Item));
+      return 1;
     }
   }
   else if (strcmp(command, "price") == 0) {
-    sprintf(output_buf,"usage: price [new price]\n");
+    // sprintf(output_buf,"usage: price [new price]\n");
+    box.price = number;
+    lseek(P->file_d, (id-1)*sizeof(Item), SEEK_SET);
+    write(P->file_d, &box, sizeof(Item));
+    return 1;
   }
-  else
+  else {
     sprintf(output_buf,"Operation failed.\n");
-
-  return 1;
+  }
+  return 0;
 }
 
 int port_close(Porter* P) {

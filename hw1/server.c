@@ -142,7 +142,10 @@ int main(int argc, char** argv) {
 #ifdef READ_SERVER
         id = atoi(requestP[i].buf);
         // sprintf(buf, "%s : %s\n",accept_read_header,requestP[i].buf);
-        if (port_read(porter, id, &amount, &price) == -1) {
+        if (id <= 0 || id > 20) {
+          sprintf(buf, "Your input is invalid.\n");
+        }
+        else if (port_read(porter, id, &amount, &price) == -1) {
           sprintf(buf, "This item is locked.\n");
         }
         else {
@@ -153,7 +156,11 @@ int main(int argc, char** argv) {
         if (requestP[i].wait_for_write != 1) {
           // wait_for_write is 1 means this socket is bidding to an item for changing
           id = atoi(requestP[i].buf);
-          if (port_write(porter, id) != 1) {
+          if (id <= 0 || id > 20) {
+            sprintf(buf, "Your input is invalid.\n");
+            write(requestP[i].conn_fd, buf, strlen(buf));
+          }
+          else if (port_write(porter, id) != 1) {
             sprintf(buf, "This item is locked.\n");
             write(requestP[i].conn_fd, buf, strlen(buf));
           }
@@ -179,9 +186,9 @@ int main(int argc, char** argv) {
         }
         else {
           // This socket is waiting for command such as buy, sell, price
-          port_operate(porter, requestP[i].buf, buf, requestP[i].item);
-          write(requestP[i].conn_fd, buf, strlen(buf));
-          port_unlock(porter, id);
+          if (port_operate(porter, requestP[i].buf, buf, requestP[i].item) == 0)
+            write(requestP[i].conn_fd, buf, strlen(buf));
+          port_unlock(porter, requestP[i].item);
         }
 #endif
 
