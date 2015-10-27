@@ -143,7 +143,7 @@ int main(int argc, char** argv) {
         id = atoi(requestP[i].buf);
         // sprintf(buf, "%s : %s\n",accept_read_header,requestP[i].buf);
         if (id <= 0 || id > 20) {
-          sprintf(buf, "Your input is invalid.\n");
+          sprintf(buf, "Operation failed.\n");
         }
         else if (port_read(porter, id, &amount, &price) == -1) {
           sprintf(buf, "This item is locked.\n");
@@ -157,7 +157,7 @@ int main(int argc, char** argv) {
           // wait_for_write is 1 means this socket is bidding to an item for changing
           id = atoi(requestP[i].buf);
           if (id <= 0 || id > 20) {
-            sprintf(buf, "Your input is invalid.\n");
+            sprintf(buf, "Operation failed.\n");
             write(requestP[i].conn_fd, buf, strlen(buf));
           }
           else if (port_write(porter, id) != 1) {
