@@ -49,8 +49,10 @@ int port_write(const Porter* P, const int id) {
       return -1;
     else {
       savelock.l_pid = getpid();
-      fcntl(P->file_d, F_SETLK, &savelock);
-      return 1;
+      if (fcntl(P->file_d, F_SETLK, &savelock) == -1)
+        return -1;
+      else
+        return 1;
     }
   }
 }
