@@ -2,8 +2,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/select.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 #include "comb.h"
 
@@ -179,6 +181,14 @@ int main(int argc, char *argv[]) {
     free(c);
     free(result);
 
+    int status;
+    pid_t wpid;
+    while (1) {
+        wpid = wait(&status);
+        if (wpid == -1 && errno == ECHILD)
+            break;
+    }
+
     return 0;
 }
 
@@ -197,8 +207,8 @@ void fork_host(int host_num, int** pfd_stoh, int** pfd_htos) {
     for (int i = 0; i < host_num; i++) {
         pid = fork();
         if (pid < 0) {
-            fputs("fork error", stderr);
-            exit(0);
+            perror("fork() error");
+            exit(-1);
         }
         
         if (pid == 0) {
@@ -213,6 +223,7 @@ void fork_host(int host_num, int** pfd_stoh, int** pfd_htos) {
             }
             sprintf(hostid, "%d", i+1);
             execlp("./host", "hw2/host", hostid, (char*)NULL);
+            _exit(EXIT_FAILURE);
         }
     }
 }
