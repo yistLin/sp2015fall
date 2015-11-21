@@ -7,6 +7,14 @@
 
 #include "comb.h"
 
+typedef struct pc {
+    int index, score;
+} PC;
+
+int cmpfunc(const void *a, const void *b) {
+    return ((PC*)b)->score - ((PC*)a)->score;
+}
+
 int** dim2array(int, int);
 void fork_host(int, int**, int**);
 
@@ -37,8 +45,6 @@ int main(int argc, char *argv[]) {
 
     fork_host(host_num, pfd_stoh, pfd_htos);
 
-    fprintf(stderr, "SYSTEM: pid = %d\n", getpid());
-
     for (int i = 0; i < host_num; i++) {
         close(pfd_htos[i][1]);
         close(pfd_stoh[i][0]);
@@ -48,8 +54,6 @@ int main(int argc, char *argv[]) {
     init_comb(c, player_num);
     create_comb(c);
     rewind_comb(c);
-
-    fprintf(stderr, "SYSTEM: comb() prepared\n");
 
     fd_set readset, allset;
     FD_ZERO(&allset);
@@ -69,8 +73,6 @@ int main(int argc, char *argv[]) {
 
     int end_flag = 0;
     int counter = host_num;
-
-    fprintf(stderr, "SYSTEM: ready to dispense players to host\n");
 
     for (int i = 0; i < host_num; i++) {
         if (end_flag == 1) {
@@ -93,10 +95,11 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    fprintf(stderr, "SYSTEM: first time dispensing finished\n");
-
-    int *total_score = (int*)malloc( sizeof(int) * (player_num+1) );
-    memset(total_score, 0, sizeof(int) * (player_num+1) );
+    PC *result = (PC*)malloc( sizeof(PC) * (player_num+1) );
+    for (int i = 0; i <= player_num; i++) {
+        result[i].index = i;
+        result[i].score = 0;
+    }
     int tmp_player[4];
     int tmp_rank[4];
 
@@ -107,15 +110,15 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < host_num; i++) {
             if (FD_ISSET(pfd_htos[i][0], &readset)) {
                 read(pfd_htos[i][0], buf, 1024);
-                fprintf(stderr, "SYSTEM: from host_%d:\n", i+1);
-                fprintf(stderr, buf);
+                // fprintf(stderr, "SYSTEM: from host_%d:\n", i+1);
+                // fprintf(stderr, buf);
                 sscanf(buf, "%d %d\n%d %d\n%d %d\n%d %d\n",
                         &tmp_player[0], &tmp_rank[0],
                         &tmp_player[1], &tmp_rank[1],
                         &tmp_player[2], &tmp_rank[2],
                         &tmp_player[3], &tmp_rank[3]);
                 for (int j = 0; j < 4; j++)
-                    total_score[ tmp_player[j] ] += (4 - tmp_rank[j]);
+                    result[ tmp_player[j] ].score += (4 - tmp_rank[j]);
 
                 if (end_flag) {
                     write(pfd_stoh[i][1], end_msg, strlen(end_msg));
@@ -139,15 +142,42 @@ int main(int argc, char *argv[]) {
         } // end loop select
         if (counter <= 0)
             break;
-        
+
     } // end while
 
+    // for (int i = 1; i <= player_num; i++)
+    //     fprintf(stdout, "player%d : %d points\n", result[i].index, result[i].score);
+
+    PC *result_sorted = (PC*)malloc(sizeof(PC) * (player_num+1));
+    for (int i = 1; i <= player_num; i++) {
+        result_sorted[i].index = result[i].index;
+        result_sorted[i].score = result[i].score;
+    }
+
+    qsort(result_sorted+1, player_num, sizeof(PC), cmpfunc);
+
+    int rank = 1;
+    int rank_accumulative = 1;
+    result[ result_sorted[1].index ].score = 1;
+    for (int i = 2; i <= player_num; i++) {
+        if (result_sorted[i].score == result_sorted[i-1].score) {
+            result[ result_sorted[i].index ].score = rank;
+            rank_accumulative++;
+        }
+        else {
+            rank += rank_accumulative;
+            rank_accumulative = 1;
+            result[ result_sorted[i].index ].score = rank;
+        }
+    }
+
     for (int i = 1; i <= player_num; i++)
-        fprintf(stderr, "player %d : %d points\n", i, total_score[i]);
+        fprintf(stdout, "%d %d\n", result[i].index, result[i].score);
 
     free(pfd_stoh);
     free(pfd_htos);
     free(c);
+    free(result);
 
     return 0;
 }
