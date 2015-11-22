@@ -9,6 +9,24 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 
+typedef struct bit {
+    int money;
+    char index;
+} Bit;
+
+typedef struct record {
+    int pindex;
+    int score;
+} Record;
+
+int cmpfunc(const void* a, const void* b) {
+    return ((Bit*)b)->money - ((Bit*)a)->money;
+}
+
+int cmpfunc2(const void* a, const void* b) {
+    return ((Record*)b)->score - ((Record*)a)->score;
+}
+
 void setUpFifoName(char fifoname[5][20], int host_id);
 
 int main(int argc, char *argv[]) {
@@ -37,9 +55,10 @@ int main(int argc, char *argv[]) {
     int playerScore[4];
 
     char cmpt_msg[30];
-    char rtn_msg[30];
+    char rtn_msg[30], rtn_msg_cpy[30];
     char rtn_index;
     int rtn_hash, rtn_money;
+    Bit bit[4];
     int msg_len;
 
     while (1) {
@@ -77,9 +96,8 @@ int main(int argc, char *argv[]) {
 
         truncate(fifoname[0], 0);
         fifo_ptoh = fopen(fifoname[0], "r");
-        // fifo_ptoh = open(fifoname[0], O_RDONLY | O_TRUNC);
 
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 4; j++)
                 playerMoney[j] += 1000;
 
@@ -87,16 +105,54 @@ int main(int argc, char *argv[]) {
             sprintf(cmpt_msg, "%d %d %d %d\n", playerMoney[0], playerMoney[1], playerMoney[2], playerMoney[3]);
             msg_len = strlen(cmpt_msg);
 
-            for (int j = 0; j < 4; j++) {
+            for (int j = 0; j < 4; j++)
                 write(fifo_htop[j], cmpt_msg, msg_len);
+
+            memset(rtn_msg_cpy, 0, sizeof(char) * 30);
+            for (int j = 0; j < 4; j++) {
+                fgets(rtn_msg, 30, fifo_ptoh);
+                if (strcmp(rtn_msg, rtn_msg_cpy) == 0) {
+                    j--;
+                    continue;
+                }
+                sscanf(rtn_msg, " %c %d %d\n", &rtn_index, &rtn_hash, &rtn_money);
+                bit[j].index = rtn_index;
+                bit[j].money = rtn_money;
+                // fprintf(stderr, "from player%c : hash = %d, money = %d\n", rtn_index, rtn_hash, rtn_money);
+                strcpy(rtn_msg, rtn_msg_cpy);
             }
 
-            memset(rtn_msg, 0, sizeof(char) * 30);
-            while (fgets(rtn_msg, 30, fifo_ptoh) != NULL) {
-                sscanf(rtn_msg, " %c %d %d\n", &rtn_index, &rtn_hash, &rtn_money);
-                fprintf(stderr, "from player%c : hash = %d, money = %d\n", rtn_index, rtn_hash, rtn_money);
-                memset(rtn_msg, 0, sizeof(char) * 30);
+            qsort(bit, 4, sizeof(Bit), cmpfunc);
+            // for (int j = 0; j < 4; j++) fprintf(stderr, "player%c: %d\n", bit[j].index, bit[j].money);
+
+            char winner = '0';
+            int hiprice;
+            int conflictFlag = 0;
+            for (int j = 1; j < 4; j++) {
+                if (bit[j].money == bit[j-1].money) {
+                    conflictFlag = 1;
+                }
+                else if (bit[j].money != bit[j-1].money && conflictFlag != 1) {
+                    winner = bit[j-1].index;
+                    hiprice = bit[j-1].money;
+                    break;
+                }
+                else
+                    conflictFlag = 0;
             }
+            if (winner == '0' && conflictFlag == 0) {
+                winner = bit[3].index;
+                hiprice = bit[3].money;
+            }
+
+            // fprintf(stderr, "winner is %c\n", winner);
+
+            if (winner != '0') {
+                playerMoney[winner - 'A'] -= hiprice;
+                playerScore[winner - 'A']++;
+            }
+
+            // for (int j = 0; j < 4; j++) fprintf(stderr, "player%c : money = %d, score = %d\n", playerIndex[j], playerMoney[j], playerScore[j]);
         }
 
         // after all thing done, close something
@@ -105,9 +161,38 @@ int main(int argc, char *argv[]) {
         while ((wpid = wait(&status)) > 0);
         fclose(fifo_ptoh);
         for (int i = 0; i < 4; i++) close(fifo_htop[i]);
+
+        Record records[4];
+        for (int i = 0; i < 4; i++) {
+            records[i].pindex = i;
+            records[i].score = playerScore[i];
+        }
+        qsort(records, 4, sizeof(Record), cmpfunc2);
+
+        // for (int i = 0; i < 4; i++) {
+        //     fprintf(stderr, "#%d player%c: id = %d, score = %d\n", i+1, (char)('A'+records[i].pindex), playerID[records[i].pindex], records[i].score);
+        // }
+
+        int rank[4];
+        int tmp_rank = 1, accumula = 1;
+        rank[ records[0].pindex ] = 1;
+        for (int i = 1; i < 4; i++) {
+            if ( records[i].score == records[i-1].score ) {
+                rank[ records[i].pindex ] = tmp_rank;
+                accumula++;
+            } else {
+                tmp_rank += accumula;
+                rank[ records[i].pindex ] = tmp_rank;
+                accumula = 1;
+            }
+        }
+
+        for (int i = 0; i < 4; i++)
+            printf("%d %d\n", playerID[i], rank[i]);
+        fflush(stdout);
     } //  END of while loop
 
-    for (int i = 0; i < 5; i++) unlink(fifoname[i]);
+    for (int i = 0;i < 5; i++) unlink(fifoname[i]);
 
     return 0;
 }
