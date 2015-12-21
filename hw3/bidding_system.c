@@ -7,25 +7,21 @@
 #include <sys/select.h>
 #include <signal.h>
 
-static volatile int exit_request = 0;
+pid_t childPID;
 
-static void handle_term(int signo) {
-    exit_request = 1;
+static void handle_ordinary(int n, char *buf) {
+    write(1, buf, n);
+    kill(childPID, SIGINT);
 }
 
 static void handle_member(int signo) {
     puts("In member customer handler");
+    kill(childPID, SIGUSR1);
 }
 
 static void handle_vip(int signo) {
     puts("In VIP customer handler");
-}
-
-static void handle_ordinary(int fd) {
-    puts("In ordinary customer handler");
-    char buf[1024];
-    int n = read(fd, buf, 1024);
-    write(1, buf, n);
+    kill(childPID, SIGUSR2);
 }
 
 int main(int argc, char const *argv[]) {
@@ -45,21 +41,18 @@ int main(int argc, char const *argv[]) {
 
     // init signal handler
     sigset_t mask, orig_mask;
-    struct sigaction act1, act2, act;
+    struct sigaction act1, act2;
     act1.sa_handler = handle_member;
     act2.sa_handler = handle_vip;
-    act.sa_handler = handle_term;
+    sigemptyset(&act2.sa_mask);
+    sigaddset(&act2.sa_mask, SIGUSR1);
 
     // install signal handler
-    if (sigaction(SIGUSR1, &act1, 0)) {
+    if (sigaction(SIGUSR1, &act1, NULL) < 0) {
         perror("sigaction");
         exit(1);
     }
-    if (sigaction(SIGUSR2, &act2, 0)) {
-        perror("sigaction");
-        exit(1);
-    }
-    if (sigaction(SIGTERM, &act, 0)) {
+    if (sigaction(SIGUSR2, &act2, NULL) < 0) {
         perror("sigaction");
         exit(1);
     }
@@ -68,15 +61,14 @@ int main(int argc, char const *argv[]) {
     sigemptyset(&mask);
     sigaddset(&mask, SIGUSR1);
     sigaddset(&mask, SIGUSR2);
-    sigaddset(&mask, SIGTERM);
-    if (sigprocmask(SIG_BLOCK, &mask, &orig_mask) < 0) {
+    if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0) {
         perror("sigprocmask");
         exit(1);
     }
 
     int pfd_ctob[2];
     pipe(pfd_ctob);
-    pid_t childPID = fork();
+    childPID = fork();
     if (childPID < 0) {
         perror("fork error");
         exit(0);
@@ -88,30 +80,23 @@ int main(int argc, char const *argv[]) {
         execlp("./customer", "./customer", argv[1], (char*)NULL);
     }
 
-    // prepare for pselect
-    fd_set fds;
+    close(pfd_ctob[1]);
     int res;
     char buf[1024];
 
-    while (!exit_request) {
-        FD_ZERO(&fds);
-        FD_SET(pfd_ctob[0], &fds);
-        res = pselect(pfd_ctob[0] + 1, &fds, NULL, NULL, NULL, &orig_mask);
+    if (sigprocmask(SIG_UNBLOCK, &mask, NULL) < 0) {
+        perror("sigprocmask");
+        exit(1);
+    }
 
-        if (res < 0 && errno != EINTR) {
-            perror("pselect");
-            exit(1);
-        }
-        else if (exit_request) {
-            puts("exit");
-            exit(0);
-        }
-        else if (res = 0)
+    while (1) {
+        res = read(pfd_ctob[0], buf, 1024);
+        if (res < 0 && errno != EINTR)
             continue;
-
-        if (FD_ISSET(pfd_ctob[0], &fds)) {
-            handle_ordinary(pfd_ctob[0]);
-        }
+        else if (res == 0)
+            break;
+        else
+            handle_ordinary(res, buf);
     }
 
     int status;
@@ -120,4 +105,3 @@ int main(int argc, char const *argv[]) {
 
     return 0;
 }
-
