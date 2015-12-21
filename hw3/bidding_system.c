@@ -11,47 +11,65 @@
 
 FILE *fp_log;
 pid_t childPID;
+int serialNum[3];
+
+int msleep(double sleept) {
+    struct timespec t;
+    t.tv_sec = (time_t) sleept;
+    t.tv_nsec = (long long int)((sleept - t.tv_sec) * 1e+9);
+
+    while (1) {
+        int rval = nanosleep(&t, &t);
+        if (rval == 0) // all done
+            return 0;
+        else if (errno == EINTR) // interrupted by signal
+            continue;
+        else // some error
+            return rval;
+    }
+    return 0;
+}
 
 static void handle_ordinary() {
-    struct timespec t;
-    t.tv_sec = 0;
-    t.tv_nsec = 50000000L;
-
+    serialNum[0]++;
     puts("receive 0");
-    nanosleep(&t, NULL);
+    fprintf(fp_log, "receive 0 %d\n", serialNum[0]);
+
+    msleep(1.0);
+
     kill(childPID, SIGINT);
+    fprintf(fp_log, "finish 0 %d\n", serialNum[0]);
 }
 
 static void handle_member(int signo) {
-    struct timespec t;
-    t.tv_sec = 0;
-    t.tv_nsec = 50000000L;
-
+    serialNum[1]++;
     puts("receive 1");
-    nanosleep(&t, NULL);
+    fprintf(fp_log, "receive 1 %d\n", serialNum[1]);
+
+    msleep(0.5);
+
     kill(childPID, SIGUSR1);
+    fprintf(fp_log, "finish 1 %d\n", serialNum[1]);
 }
 
 static void handle_vip(int signo) {
-    struct timespec t;
-    t.tv_sec = 0;
-    t.tv_nsec = 50000000L;
-    
+    serialNum[2]++;
     puts("receive 2");
-    nanosleep(&t, NULL);
+    fprintf(fp_log, "receive 2 %d\n", serialNum[2]);
+
+    msleep(0.2);
+
     kill(childPID, SIGUSR2);
+    fprintf(fp_log, "finish 2 %d\n", serialNum[2]);
 }
 
 int mycomp(char buf[]) {
     buf[8] = '\0';
-    if (strcmp(buf, "ordinary") == 0) {
-        memset(buf, 0, sizeof(buf));
-        return 1;
-    }
-    else {
-        memset(buf, 0, sizeof(buf));
-        return 0;
-    }
+    int res = 0;
+    if (strcmp(buf, "ordinary") == 0)
+        res = 1;
+    memset(buf, 0, sizeof(buf));
+    return res;
 }
 
 int main(int argc, char const *argv[]) {
@@ -93,6 +111,8 @@ int main(int argc, char const *argv[]) {
 
     int pfd_ctob[2];
     pipe(pfd_ctob);
+    serialNum[0] = serialNum[1] = serialNum[2] = 0;
+
     childPID = fork();
     if (childPID < 0) {
         perror("fork error");
@@ -120,8 +140,11 @@ int main(int argc, char const *argv[]) {
     }
 
     puts("terminate");
+    fprintf(fp_log, "terminate\n");
+
     int status;
     waitpid(childPID, &status, 0);
+
     fclose(fp_log);
     close(pfd_ctob[0]);
 
