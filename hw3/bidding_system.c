@@ -32,7 +32,6 @@ int msleep(double sleept) {
 
 static void handle_ordinary() {
     serialNum[0]++;
-    puts("receive 0");
     fprintf(fp_log, "receive 0 %d\n", serialNum[0]);
 
     msleep(1.0);
@@ -43,7 +42,6 @@ static void handle_ordinary() {
 
 static void handle_member(int signo) {
     serialNum[1]++;
-    puts("receive 1");
     fprintf(fp_log, "receive 1 %d\n", serialNum[1]);
 
     msleep(0.5);
@@ -54,7 +52,6 @@ static void handle_member(int signo) {
 
 static void handle_vip(int signo) {
     serialNum[2]++;
-    puts("receive 2");
     fprintf(fp_log, "receive 2 %d\n", serialNum[2]);
 
     msleep(0.2);
@@ -78,8 +75,6 @@ int main(int argc, char const *argv[]) {
         fputs("usage: ./bidding_system [test_data]", stderr);
         exit(0);
     }
-
-    fprintf(stderr, "my process ID = %d\n", getpid());
 
     fp_log = fopen("bidding_system_log", "w");
     if (fp_log == NULL) {
@@ -143,7 +138,6 @@ int main(int argc, char const *argv[]) {
             handle_ordinary();
     }
 
-    puts("terminate");
     fprintf(fp_log, "terminate\n");
 
     int status;

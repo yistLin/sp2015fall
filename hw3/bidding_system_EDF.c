@@ -13,82 +13,124 @@
 #define SIGUSR3 SIGWINCH
 
 typedef struct work {
-    int type;
-    struct itimerval tim;
+    int type, firstdeal;
+    struct timespec tim, lim;
     struct work *next;
 } Work;
 
 Work *head, *curr;
+FILE *fp_log;
+pid_t childPID;
+int serialNum[3];
+int signal_arr[3];
 
 void init_schedule() {
     head = (Work*)malloc(sizeof(Work));
     curr = head;
 }
 
-int push_work(int c, int pt_sec, int pt_usec, int lt_sec, int lt_usec) {
-    curr->next = (Work*)malloc(sizeof(Work));
-    curr = curr->next;
-    curr->type = c;
-    curr->tim.it_value.tv_sec = pt_sec;
-    curr->tim.it_value.tv_usec = pt_usec;
-    curr->tim.it_interval.tv_sec = 0;
-    curr->tim.it_interval.tv_usec = 0;
-    curr->next = NULL;
-    return 1;
-}
-
-int top_work(int *c, struct itimerval *t) {
-    if (head->next == NULL)
-        return 0;
-    else {
-        *c = head->next->type;
-        *t = head->next->tim;
+int run_work() {
+    Work *first = head->next;
+    Work *tmp = head->next;
+    struct timespec t;
+    if (first != NULL) {
+        if (first->firstdeal == 1) {
+            fprintf(fp_log, "receive %d %d\n", first->type, ++serialNum[first->type]);
+            first->firstdeal = 0;
+        }
+        t.tv_sec = first->tim.tv_sec;
+        t.tv_nsec = first->tim.tv_nsec;
+        while (tmp != NULL) {
+            tmp->lim.tv_sec -= t.tv_sec;
+            if (tmp->lim.tv_nsec < t.tv_nsec) {
+                (tmp->lim.tv_sec)--;
+                (tmp->lim.tv_nsec) += 1e+9;
+            }
+            tmp->lim.tv_nsec -= t.tv_nsec;
+            tmp = tmp->next;
+        }
+        if (nanosleep(&(first->tim), &(first->tim)) == 0) {
+            // the work is done
+            kill(childPID, signal_arr[first->type]);
+            fprintf(fp_log, "finish %d %d\n", first->type, serialNum[first->type]);
+            head->next = first->next;
+            free(first);
+        }
+        return run_work();
     }
     return 1;
 }
 
-int pop_work() {
-    if (head->next == NULL)
-        return 0;
-    else {
-        Work* tmp = head->next;
-        if (tmp == curr)
-            curr = head;
-        head->next = tmp->next;
-        free(tmp);
+int compLimit(struct timespec a, struct timespec b) {
+    if (a.tv_sec < b.tv_sec)
+        return 1;
+    else if (a.tv_sec == b.tv_sec) {
+        if (a.tv_nsec < b.tv_sec)
+            return 1;
+        else
+            return 0;
     }
-    return 1;
+    else
+        return 0;
 }
 
-FILE *fp_log;
-pid_t childPID;
-int serialNum[3];
+int insert_work(int c, double pt, double lt) {
+    // get remaining time
+    // puts("In insert_work()");
+    struct timespec rem;
+    memset(&rem, 0, sizeof(rem));
+    Work *tmp = head->next;
+    if (tmp != NULL) {
+        rem.tv_sec = tmp->tim.tv_sec;
+        rem.tv_nsec = tmp->tim.tv_nsec;
+    }
+
+    // add remaining time back to limit time
+    while (tmp != NULL) {
+        (tmp->lim.tv_sec) += rem.tv_sec;
+        (tmp->lim.tv_nsec) += rem.tv_nsec;
+        if ((tmp->lim.tv_nsec) > 1e+9) {
+            tmp->lim.tv_nsec -= 1e+9;
+            (tmp->lim.tv_sec)++;
+        }
+        tmp = tmp->next;
+    }
+
+    // create new work
+    Work *nwk = (Work*)malloc(sizeof(Work));
+    nwk->type = c;
+    nwk->firstdeal = 1;
+    nwk->tim.tv_sec = (time_t)pt;
+    nwk->tim.tv_nsec = (long long int)((pt - (time_t)pt) * 1e+9);
+    nwk->lim.tv_sec = (time_t)lt;
+    nwk->lim.tv_nsec = (long long int)((lt - (time_t)lt) * 1e+9);
+
+    // insert new work
+    tmp = head->next;
+    Work *prev = head;
+    while (tmp != NULL && compLimit(tmp->lim, nwk->lim)) {
+        prev = tmp;
+        tmp = tmp->next;
+    }
+    prev->next = nwk;
+    nwk->next = tmp;
+    run_work();
+    return 1;
+}
 
 static void handle_ordinary(int signo) {
     // process time = 0.5, limit time = 2.0
-    puts("receive 0");
-    fprintf(fp_log, "receive 0 %d\n", ++serialNum[0]);
-
-    kill(childPID, SIGUSR1);
-    fprintf(fp_log, "finish 0 %d\n", serialNum[0]);
+    insert_work(0, 0.5, 2.0);
 }
 
 static void handle_patient(int signo) {
     // process time = 1.0, limit time = 3.0
-    puts("receive 1");
-    fprintf(fp_log, "receive 1 %d\n", ++serialNum[1]);
-
-    kill(childPID, SIGUSR2);
-    fprintf(fp_log, "finish 1 %d\n", serialNum[1]);
+    insert_work(1, 1.0, 3.0);
 }
 
 static void handle_impatient(int signo) {
     // process time = 0.2, limit time = 0.3
-    puts("receive 2");
-    fprintf(fp_log, "receive 2 %d\n", ++serialNum[2]);
-
-    kill(childPID, SIGUSR3);
-    fprintf(fp_log, "finish 2 %d\n", serialNum[2]);
+    insert_work(2, 0.2, 0.3);
 }
 
 int mycomp(char buf[]) {
@@ -107,7 +149,7 @@ int main(int argc, char const *argv[]) {
         exit(0);
     }
 
-    fprintf(stderr, "my process ID = %d\n", getpid());
+    // fprintf(stderr, "my process ID = %d\n", getpid());
 
     fp_log = fopen("bidding_system_log", "w");
     if (fp_log == NULL) {
@@ -123,6 +165,12 @@ int main(int argc, char const *argv[]) {
     act1.sa_flags = 0;
     act2.sa_flags = 0;
     act3.sa_flags = 0;
+    sigemptyset(&act1.sa_mask);
+    sigemptyset(&act2.sa_mask);
+    sigemptyset(&act3.sa_mask);
+    signal_arr[0] = SIGUSR1;
+    signal_arr[1] = SIGUSR2;
+    signal_arr[2] = SIGUSR3;
 
     // install signal handler
     if (sigaction(SIGUSR1, &act1, NULL) < 0) {
@@ -174,7 +222,6 @@ int main(int argc, char const *argv[]) {
     }
 
     fprintf(fp_log, "terminate\n");
-    puts("terminate");
 
     int status;
     waitpid(childPID, &status, 0);
