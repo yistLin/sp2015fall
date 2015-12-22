@@ -109,9 +109,10 @@ int main(int argc, char const *argv[]) {
         exit(1);
     }
 
-    int pfd_ctob[2];
+    int pfd_ctob[2], pfd_btoc[2];
     pipe(pfd_ctob);
-    serialNum[0] = serialNum[1] = serialNum[2] = 0;
+    pipe(pfd_btoc);
+    memset(serialNum, 0, 3 * sizeof(int));
 
     childPID = fork();
     if (childPID < 0) {
@@ -121,11 +122,14 @@ int main(int argc, char const *argv[]) {
     else if (childPID == 0) {
         // fork a child process and execute ./customer
         dup2(pfd_ctob[1], STDOUT_FILENO);
+        dup2(pfd_btoc[0], STDIN_FILENO);
         close(pfd_ctob[1]);
+        close(pfd_btoc[0]);
         execlp("./customer", "./customer", argv[1], (char*)NULL);
     }
 
     close(pfd_ctob[1]);
+    close(pfd_btoc[0]);
     int res;
     char buf[32];
 
@@ -147,6 +151,7 @@ int main(int argc, char const *argv[]) {
 
     fclose(fp_log);
     close(pfd_ctob[0]);
+    close(pfd_btoc[1]);
 
     return 0;
 }
