@@ -215,6 +215,10 @@ int main (int argc, char const *argv[]) {
     memset(&act4, 0, sizeof(act4));
     act4.sa_handler = timer_handler;
     act4.sa_flags = 0;
+    sigemptyset(&act4.sa_mask);
+    sigaddset(&act4.sa_mask, SIGUSR1);
+    sigaddset(&act4.sa_mask, SIGUSR2);
+    sigaddset(&act4.sa_mask, SIGINT);
     sigaction (SIGALRM, &act4, NULL);
 
     /* Do busy work. */
