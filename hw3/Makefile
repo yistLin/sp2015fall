@@ -1,13 +1,7 @@
 CC=gcc
 OBJ=bidding_system customer bidding_system_EDF
 
-all: $(s1) $(s2) $(c1)
-
-s1: bidding_system
-
-s2: bidding_system_EDF
-
-c1: customer
+all: $(OBJ)
 
 bidding_system: bidding_system.c
 	$(CC) -o $@ $<
