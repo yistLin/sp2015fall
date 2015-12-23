@@ -5,5 +5,5 @@ say.
 
 ### Self-Examination
 
-I have finish all things bidding_system and bidding_system_EDF should do.
+I have finish all things.
 
