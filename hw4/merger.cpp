@@ -37,7 +37,11 @@ void* lsorter(void *arg) {
     pthread_mutex_unlock(&lock);
 
     sort((*v).begin(), (*v).end());
+
+    pthread_mutex_lock(&lock);
     printf("sorted %d elements.\n", v->size());
+    pthread_mutex_unlock(&lock);
+
     return NULL;
 }
 
@@ -95,7 +99,9 @@ void* lmerger(void* arg) {
         tmp.insert(tmp.end(), (v1->begin())+lpr, (v1->end()));
     (*v1) = tmp;
     v2->clear();
+    pthread_mutex_lock(&lock);
     printf("Merged %d and %d elements with %d duplicates.\n", lsize, rsize, dup);
+    pthread_mutex_unlock(&lock);
 }
 
 vector<int>* merger(vector< vector<int> >& v) {
