@@ -1,0 +1,105 @@
+\documentclass{article}
+
+\title{System Programming Handwriting Homework 2}
+\date{2015-10-12}
+\author{B03902048}
+
+\usepackage{enumerate}
+\usepackage[usenames, dvipsnames]{color}
+\usepackage{courier}
+
+\usepackage{geometry}
+\geometry{
+	a4paper,
+	total={210mm,297mm},
+	left=20mm,
+	right=20mm,
+	top=20mm,
+	bottom=20mm,
+}
+
+\usepackage{listings}
+\lstset {
+	language=C,
+	basicstyle=\ttfamily,
+	tabsize=4,
+	columns=fixed,
+	showstringspaces=false,
+	showtabs=false,
+	keepspaces,
+	commentstyle=\color{Gray},
+	keywordstyle=\color{blue}
+}
+
+\begin{document}
+
+\paragraph
+{\huge SP Handwriting Assignment 2}
+
+\paragraph
+{\Large Student ID: B03902048}
+
+\large
+\begin{enumerate}[(a)]
+
+\item
+Please give the meaning of command:
+\begin{lstlisting}
+./a.out < infile 2>&1 > outfile
+\end{lstlisting}
+\textbf{Ans:}\\
+The file descriptor 2 is \textit{stderr} and 1 is \textit{stdout}.
+At first, the content of infile will be redirect as the \textit{stdin}. 
+Then \textit{stderr} will be redirect to \textit{stdout}. 
+And the \textit{stderr} output by \textit{a.out} will be shown on the screen.
+But \textit{stdout} output by \textit{a.out} will be redirect to the outfile.
+
+\begin{lstlisting}
+int main(void) {
+	char buf[4096];
+	fgets(buf, 4096, stdin);
+	fprintf(stdout, "STDOUT_%s", buf);
+	fprintf(stderr, "STDERR_%s", buf);
+	return 0;
+}
+\end{lstlisting}
+
+after the above code running as a.out in that command,
+\newline
+\textbf{infile}: hi\\
+\textbf{outfile} : STDOUT\_hi \\
+\textbf{screen} : STDERR\_hi
+
+
+\item
+Please use \textit{dup()} or \textit{dup2()} to do the redirections of the command:
+\begin{lstlisting}
+./a.out < infile 2>&1 > outfile
+\end{lstlisting}
+in the following program fragment. Error checking could be ignored.
+
+\begin{lstlisting}
+int main(int argc, char *argv[]){
+	int fd1, fd2;
+	fd1 = open(infile, O_RDONLY);
+	fd2 = open(outfile, O_WRONLY | O_CREAT, 0666);
+	
+	// my own code between
+
+	dup2(fd1, 0); // redirect the message from infile to stdin
+	close(fd1);
+
+	dup2(1, 2); // redirect the message from stderr to stdout
+
+	dup2(fd2, 1); // redirect the message from stdout to outfile
+	close(fd2);	
+	
+	// my own code between
+	
+	execlp("./a.out", "./a.out", (char *)0);
+	return 0;
+}
+\end{lstlisting}
+
+\end{enumerate}
+\end{document}
