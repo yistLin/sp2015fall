@@ -1,3 +1,4 @@
+/*b03902048 林義聖*/
 #include <stdio.h>
 #include <time.h>
 #include <errno.h>
@@ -104,7 +105,6 @@ int main(int argc, char *argv[]) {
             memset(cmpt_msg, 0, sizeof(char) * 30);
             sprintf(cmpt_msg, "%d %d %d %d\n", playerMoney[0], playerMoney[1], playerMoney[2], playerMoney[3]);
             msg_len = strlen(cmpt_msg);
-
             for (int j = 0; j < 4; j++)
                 write(fifo_htop[j], cmpt_msg, msg_len);
 
@@ -118,12 +118,10 @@ int main(int argc, char *argv[]) {
                 sscanf(rtn_msg, " %c %d %d\n", &rtn_index, &rtn_hash, &rtn_money);
                 bit[j].index = rtn_index;
                 bit[j].money = rtn_money;
-                // fprintf(stderr, "from player%c : hash = %d, money = %d\n", rtn_index, rtn_hash, rtn_money);
-                strcpy(rtn_msg, rtn_msg_cpy);
+                strcpy(rtn_msg_cpy, rtn_msg);
             }
 
             qsort(bit, 4, sizeof(Bit), cmpfunc);
-            // for (int j = 0; j < 4; j++) fprintf(stderr, "player%c: %d\n", bit[j].index, bit[j].money);
 
             char winner = '0';
             int hiprice;
@@ -145,14 +143,10 @@ int main(int argc, char *argv[]) {
                 hiprice = bit[3].money;
             }
 
-            // fprintf(stderr, "winner is %c\n", winner);
-
             if (winner != '0') {
                 playerMoney[winner - 'A'] -= hiprice;
                 playerScore[winner - 'A']++;
             }
-
-            // for (int j = 0; j < 4; j++) fprintf(stderr, "player%c : money = %d, score = %d\n", playerIndex[j], playerMoney[j], playerScore[j]);
         }
 
         // after all thing done, close something
@@ -169,10 +163,6 @@ int main(int argc, char *argv[]) {
         }
         qsort(records, 4, sizeof(Record), cmpfunc2);
 
-        // for (int i = 0; i < 4; i++) {
-        //     fprintf(stderr, "#%d player%c: id = %d, score = %d\n", i+1, (char)('A'+records[i].pindex), playerID[records[i].pindex], records[i].score);
-        // }
-
         int rank[4];
         int tmp_rank = 1, accumula = 1;
         rank[ records[0].pindex ] = 1;
@@ -187,8 +177,8 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        for (int i = 0; i < 4; i++)
-            printf("%d %d\n", playerID[i], rank[i]);
+        printf("%d %d\n%d %d\n%d %d\n%d %d\n",playerID[0],rank[0],
+                playerID[1],rank[1],playerID[2],rank[2],playerID[3],rank[3]);
         fflush(stdout);
     } //  END of while loop
 
